@@ -1,7 +1,7 @@
 ![MuseScore](mscore/data/musescore_logo_full.png)  
- Music notation and composition software
+Music notation and composition software
 
-[![Travis CI](https://secure.travis-ci.org/musescore/MuseScore.svg)](https://travis-ci.org/musescore/MuseScore)
+[![Travis CI](https://secure.travis-ci.org/musescore/MuseScore.svg?branch=master)](https://travis-ci.org/musescore/MuseScore)
 [![Appveyor](https://ci.appveyor.com/api/projects/status/bp3ww6v985i64ece/branch/master?svg=true)](https://ci.appveyor.com/project/MuseScore/musescore/branch/master)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.html)
 
@@ -26,7 +26,7 @@ MuseScore is an open source and free music notation software. For support, contr
 * [How to compile MuseScore?](https://musescore.org/en/developers-handbook/compilation)
 
 ## License
-MuseScore is licensed under GPL version 2.0. See LICENSE.GPL in the same directory.
+MuseScore is licensed under GPL version 2.0. See [LICENSE.GPL](https://github.com/musescore/MuseScore/blob/master/LICENSE.GPL) in the same directory.
 
 ## Packages
 * **aeolus** Clone of [Aeolus](http://kokkinizita.linuxaudio.org/linuxaudio/aeolus/)
@@ -66,13 +66,13 @@ Kept as an example of how to integrate with a complex synthesizer.
 * **thirdparty** Contains projects which are included for convenience, usually to integrate them into the build system to make them available for all supported platforms.
 
     * **thirdparty/rtf2html**
-    Used for capella import
+    Used for capella import. Clone from [rtf2html@sourceforge](https://github.com/lvu/rtf2html), code now at [rtf2html@github](https://github.com/lvu/rtf2html)
 
-    * **thirdparty/diff**
-    Not used currently. [Diff, Match and Patch Library](https://code.google.com/p/google-diff-match-patch/)
+    * **thirdparty/dtl**
+    Used for the score comparison tool. [Diff Template Library](https://github.com/cubicdaiya/dtl)
 
     * **thirdparty/ofqf**
-    OSC server interface. Based on [OSC for Qt4](http://www.arnoldarts.de/projects/ofqf/)
+    OSC server interface. Based on [OSC for Qt4](http://www.arnoldarts.de/projects/ofqf/), code now on [github](https://github.com/kampfschlaefer/ofq)
 
     * **thirdparty/singleapp**
     Clone from [Qt Single Application](https://github.com/qtproject/qt-solutions/tree/master/qtsingleapplication)
@@ -126,4 +126,6 @@ To run the debug version, type:
     ./build.debug/mscore/mscore
 
 ### Testing
-See [mtest/README.md](/mtest/README.md) or https://musescore.org/en/developers-handbook/testing for instructions on how to run the test suite.
+See [mtest/README.md](/mtest/README.md) or [the developer handbook](https://musescore.org/handbook/developers-handbook/finding-your-way-around/automated-tests) for instructions on how to run the test suite.
+
+The new [script testing facility](https://musescore.org/node/278278) is also available to create your own automated tests. Please try it out!

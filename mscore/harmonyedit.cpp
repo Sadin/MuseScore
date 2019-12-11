@@ -1,7 +1,6 @@
 //=============================================================================
 //  MuseScore
 //  Linux Music Score Editor
-//  $Id:$
 //
 //  Copyright (C) 2009-2011 Werner Schweer and others
 //
@@ -600,7 +599,7 @@ void HarmonyCanvas::updateChordDescription()
       double x  = 0, y = 0;
       foreach(const TextSegment* ts, textList) {
             ++idx;
-            if (idx == 1) {     // dont save base
+            if (idx == 1) {     // don’t save base
                   x = ts->x + ts->width();
                   y = ts->y;
                   continue;

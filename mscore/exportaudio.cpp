@@ -1,7 +1,6 @@
 //=============================================================================
 //  MusE Score
 //  Linux Music Score Editor
-//  $Id: exportaudio.cpp 5660 2012-05-22 14:17:39Z wschweer $
 //
 //  Copyright (C) 2009 Werner Schweer and others
 //
@@ -34,9 +33,9 @@ namespace Ms {
 
 ///
 /// \brief Function to synthesize audio and output it into a generic QIODevice
-/// \param The score to output
-/// \param The output device
-/// \param An optional callback function that will be notified with the progress in range [0, 1]
+/// \param score The score to output
+/// \param device The output device
+/// \param updateProgress An optional callback function that will be notified with the progress in range [0, 1]
 /// \return True on success, false otherwise.
 ///
 /// If the callback function is non zero an returns false the export will be canceled.
@@ -54,9 +53,15 @@ bool MuseScore::saveAudio(Score* score, QIODevice *device, std::function<bool(fl
     }
 
     EventMap events;
-    score->renderMidi(&events);
-    if(events.size() == 0)
-          return false;
+    // In non-GUI mode current synthesizer settings won't
+    // allow single note dynamics. See issue #289947.
+    const bool useCurrentSynthesizerState = !MScore::noGui;
+
+    if (useCurrentSynthesizerState) {
+          score->renderMidi(&events, synthesizerState());
+          if (events.empty())
+                return false;
+          }
 
     MasterSynthesizer* synth = synthesizerFactory();
     synth->init();
@@ -71,6 +76,16 @@ bool MuseScore::saveAudio(Score* score, QIODevice *device, std::function<bool(fl
           bool r = synth->setState(mscore->synthesizerState());
           if (!r)
                 synth->init();
+          }
+
+    if (!useCurrentSynthesizerState) {
+          score->masterScore()->rebuildAndUpdateExpressive(synth->synthesizer("Fluid"));
+          score->renderMidi(&events, score->synthesizerState());
+          if (synti)
+                score->masterScore()->rebuildAndUpdateExpressive(synti->synthesizer("Fluid"));
+
+          if (events.empty())
+                return false;
           }
 
     int oldSampleRate  = MScore::sampleRate;
@@ -93,16 +108,16 @@ bool MuseScore::saveAudio(Score* score, QIODevice *device, std::function<bool(fl
           //
           // init instruments
           //
-          foreach(Part* part, score->parts()) {
+          for (Part* part : score->parts()) {
                 const InstrumentList* il = part->instruments();
-                for(auto i = il->begin(); i!= il->end(); i++) {
-                      for (const Channel* a : i->second->channel()) {
-                            a->updateInitList();
-                            for (MidiCoreEvent e : a->init) {
+                for (auto i = il->begin(); i!= il->end(); i++) {
+                      for (const Channel* instrChan : i->second->channel()) {
+                            const Channel* a = score->masterScore()->playbackChannel(instrChan);
+                            for (MidiCoreEvent e : a->initList()) {
                                   if (e.type() == ME_INVALID)
                                         continue;
-                                  e.setChannel(a->channel);
-                                  int syntiIdx = synth->index(score->masterScore()->midiMapping(a->channel)->articulation->synti);
+                                  e.setChannel(a->channel());
+                                  int syntiIdx = synth->index(score->masterScore()->midiMapping(a->channel())->articulation()->synti());
 								  synth->play(e, syntiIdx);
                                   }
                             }
@@ -137,9 +152,9 @@ bool MuseScore::saveAudio(Score* score, QIODevice *device, std::function<bool(fl
                       const NPlayEvent& e = playPos->second;
                       if (e.isChannelEvent()) {
                             int channelIdx = e.channel();
-                            Channel* c = score->masterScore()->midiMapping(channelIdx)->articulation;
-                            if (!c->mute) {
-                                  synth->play(e, synth->index(c->synti));
+                            const Channel* c = score->masterScore()->midiMapping(channelIdx)->articulation();
+                            if (!c->mute()) {
+                                  synth->play(e, synth->index(c->synti()));
                                   }
                             }
                       }
@@ -164,7 +179,7 @@ bool MuseScore::saveAudio(Score* score, QIODevice *device, std::function<bool(fl
                 playTime = endTime;
                 if (updateProgress) {
                     // normalize to [0, 1] range
-                    if (!updateProgress((pass * et + playTime) / passes / et)) {
+                    if (!updateProgress(float(pass * et + playTime) / passes / et)) {
                         cancelled = true;
                         break;
                     }
@@ -269,7 +284,7 @@ bool MuseScore::saveAudio(Score* score, const QString& name)
             }
 
       EventMap events;
-      score->renderMidi(&events);
+      score->renderMidi(&events, synthesizerState());
       if(events.size() == 0)
             return false;
 
@@ -295,7 +310,7 @@ bool MuseScore::saveAudio(Score* score, const QString& name)
       progress.setWindowModality(Qt::ApplicationModal);
       //progress.setCancelButton(0);
       progress.setCancelButtonText(tr("Cancel"));
-      progress.setLabelText(tr("Exporting..."));
+      progress.setLabelText(tr("Exporting…"));
       if (!MScore::noGui) {
           // callback function that will update the progress bar
           // it will return false and thus cancel the export if the user

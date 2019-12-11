@@ -13,6 +13,7 @@
 #include "stafftype.h"
 
 #include "chord.h"
+#include "measure.h"
 #include "mscore.h"
 #include "navigate.h"
 #include "staff.h"
@@ -61,7 +62,7 @@ StaffType::StaffType(StaffGroup sg, const QString& xml, const QString& name, int
    _lineDistance(Spatium(lineDist)),
    _showBarlines(showBarLines),
    _showLedgerLines(showLedgerLines),
-   _slashStyle(stemless),
+   _stemless(stemless),
    _genClef(genClef),
    _genTimesig(genTimeSig),
    _genKeysig(genKeySig)
@@ -84,7 +85,7 @@ StaffType::StaffType(StaffGroup sg, const QString& xml, const QString& name, int
       setLineDistance(Spatium(lineDist));
       setGenClef(genClef);
       setShowBarlines(showBarLines);
-      setSlashStyle(stemless);
+      setStemless(stemless);
       setGenTimesig(genTimesig);
       setDurationFontName(durFontName);
       setDurationFontSize(durFontSize);
@@ -159,7 +160,7 @@ bool StaffType::isSameStructure(const StaffType& st) const
          || st._lineDistance != _lineDistance
          || st._genClef      != _genClef
          || st._showBarlines != _showBarlines
-         || st._slashStyle   != _slashStyle
+         || st._stemless     != _stemless
          || st._genTimesig   != _genTimesig)
             return false;
       if (_group == StaffGroup::STANDARD)                   // standard specific
@@ -210,8 +211,10 @@ void StaffType::write(XmlWriter& xml) const
             xml.tag("stepOffset", _stepOffset);
       if (!_genClef)
             xml.tag("clef", _genClef);
-      if (_slashStyle)
-            xml.tag("slashStyle", _slashStyle);
+      if (_stemless) {
+            xml.tag("slashStyle", _stemless); // for backwards compatibility
+            xml.tag("stemless", _stemless);
+            }
       if (!_showBarlines)
             xml.tag("barlines", _showBarlines);
       if (!_genTimesig)
@@ -244,9 +247,9 @@ void StaffType::write(XmlWriter& xml) const
             xml.tag("upsideDown",       _upsideDown);
             xml.tag("showTabFingering", _showTabFingering, false);
             xml.tag("useNumbers",       _useNumbers);
-            // only output "showBackTied" if different from !"slashStyle"
+            // only output "showBackTied" if different from !"stemless"
             // to match the behaviour in 2.0.2 scores (or older)
-            if (_showBackTied != !_slashStyle)
+            if (_showBackTied != !_stemless)
                   xml.tag("showBackTied",  _showBackTied);
             }
       xml.etag();
@@ -278,19 +281,21 @@ void StaffType::read(XmlReader& e)
                   setLines(e.readInt());
             else if (tag == "lineDistance")
                   setLineDistance(Spatium(e.readDouble()));
-            else if (tag == "clef")
-                  setGenClef(e.readInt());
-            else if (tag == "slashStyle") {
-                  bool val = e.readInt() != 0;
-                  setSlashStyle(val);
-                  setShowBackTied(!val);  // for compatibility with 2.0.2 scores where this prop
-                  }                       // was lacking and controlled by "slashStyle" instead
             else if (tag == "yoffset")
                   _yoffset = Spatium(e.readDouble());
             else if (tag == "mag")
                   _userMag = e.readDouble();
             else if (tag == "small")
                   _small = e.readBool();
+            else if (tag == "stepOffset")
+                  _stepOffset = e.readInt();
+            else if (tag == "clef")
+                  setGenClef(e.readInt());
+            else if ((tag == "slashStyle") || (tag == "stemless")) {
+                  bool val = e.readInt() != 0;
+                  setStemless(val);
+                  setShowBackTied(!val);  // for compatibility with 2.0.2 scores where this prop
+                  }                       // was lacking and controlled by "slashStyle" instead
             else if (tag == "barlines")
                   setShowBarlines(e.readInt());
             else if (tag == "timesig")
@@ -335,7 +340,7 @@ void StaffType::read(XmlReader& e)
                   setShowTabFingering(e.readBool());
             else if (tag == "useNumbers")
                   setUseNumbers(e.readBool());
-            else if (tag == "showBackTied")           // must be after reading "slashStyle" prop, as in older
+            else if (tag == "showBackTied")           // must be after reading "slashStyle"/"stemless" prop, as in older
                   setShowBackTied(e.readBool());      // scores, this prop was lacking and controlled by "slashStyle"
             else
                   e.unknown();
@@ -411,7 +416,7 @@ void StaffType::setOnLines(bool val)
 //    checks whether the internally computed metrics are is still valid and re-computes them, if not
 //---------------------------------------------------------
 
-void StaffType::setDurationMetrics()
+void StaffType::setDurationMetrics() const
       {
       if (_durationMetricsValid && _refDPI == DPI)           // metrics are still valid
             return;
@@ -440,7 +445,7 @@ void StaffType::setDurationMetrics()
       _durationMetricsValid = true;
       }
 
-void StaffType::setFretMetrics()
+void StaffType::setFretMetrics() const
       {
       if (_fretMetricsValid && _refDPI == DPI)
             return;
@@ -519,17 +524,17 @@ void StaffType::setFretFontName(const QString& name)
 //   durationBoxH / durationBoxY
 //---------------------------------------------------------
 
-qreal StaffType::durationBoxH()
+qreal StaffType::durationBoxH() const
       {
-      if (!_genDurations && !_slashStyle)
+      if (!_genDurations && !_stemless)
             return 0.0;
       setDurationMetrics();
       return _durationBoxH;
       }
 
-qreal StaffType::durationBoxY()
+qreal StaffType::durationBoxY() const
       {
-      if (!_genDurations && !_slashStyle)
+      if (!_genDurations && !_stemless)
             return 0.0;
       setDurationMetrics();
       return _durationBoxY + _durationFontUserY * SPATIUM20;
@@ -865,7 +870,7 @@ TabDurationSymbol::TabDurationSymbol(Score* s)
       _text       = QString();
       }
 
-TabDurationSymbol::TabDurationSymbol(Score* s, StaffType* tab, TDuration::DurationType type, int dots)
+TabDurationSymbol::TabDurationSymbol(Score* s, const StaffType* tab, TDuration::DurationType type, int dots)
    : Element(s, ElementFlag::NOT_SELECTABLE)
       {
       setGenerated(true);
@@ -896,7 +901,7 @@ void TabDurationSymbol::layout()
       qreal xpos, ypos;             // position coords
 
       _beamGrid = TabBeamGrid::NONE;
-      Chord* chord = toChord(parent());
+      Chord* chord = parent() && parent()->isChord() ? toChord(parent()) : nullptr;
       // if no chord (shouldn't happens...) or not a special beam mode, layout regular symbol
       if (!chord || !chord->isChord() ||
             (chord->beamMode() != Beam::Mode::BEGIN && chord->beamMode() != Beam::Mode::MID &&
@@ -980,6 +985,14 @@ void TabDurationSymbol::draw(QPainter* painter) const
       {
       if (!_tab)
             return;
+
+      if (_repeat && (_tab->symRepeat() == TablatureSymbolRepeat::SYSTEM)) {
+            Chord* chord = toChord(parent());
+            ChordRest* prevCR = prevChordRest(chord);
+            if (prevCR && (chord->measure()->system() == prevCR->measure()->system()))
+                  return;
+            }
+
       qreal mag = magS();
       qreal imag = 1.0 / mag;
 
@@ -1344,8 +1357,8 @@ struct NoteHeadSchemeName {
 
 static NoteHeadSchemeName noteHeadSchemeNames[] = {
       {"normal",              QT_TRANSLATE_NOOP("noteheadschemes", "Normal") },
-      {"name-pitch",          QT_TRANSLATE_NOOP("noteheadschemes", "Pitch Name") },
-      {"name-pitch-german",   QT_TRANSLATE_NOOP("noteheadschemes", "German Pitch Name") },
+      {"name-pitch",          QT_TRANSLATE_NOOP("noteheadschemes", "Pitch Names") },
+      {"name-pitch-german",   QT_TRANSLATE_NOOP("noteheadschemes", "German Pitch Names") },
       {"solfege-movable",     QT_TRANSLATE_NOOP("noteheadschemes", "Solf\u00e8ge Movable Do") }, // &egrave;
       {"solfege-fixed",       QT_TRANSLATE_NOOP("noteheadschemes", "Solf\u00e8ge Fixed Do") },   // &egrave;
       {"shape-4",             QT_TRANSLATE_NOOP("noteheadschemes", "4-shape (Walker)") },
@@ -1387,7 +1400,8 @@ void StaffType::initStaffTypes()
       _presets = {
 //                       group,              xml-name,  human-readable-name,          lin stpOff  dist clef   bars stmless time  key    ledger
          StaffType(StaffGroup::STANDARD,   "stdNormal", QObject::tr("Standard"),        5, 0,     1,   true,  true, false, true, true,  true),
-         StaffType(StaffGroup::PERCUSSION, "perc1Line", QObject::tr("Perc. 1 line"),    1, -4,    1,   true,  true, false, true, false, true),
+//       StaffType(StaffGroup::PERCUSSION, "perc1Line", QObject::tr("Perc. 1 line"),    1, -4,    1,   true,  true, false, true, false, true),
+         StaffType(StaffGroup::PERCUSSION, "perc1Line", QObject::tr("Perc. 1 line"),    1, 0,     1,   true,  true, false, true, false, true),
          StaffType(StaffGroup::PERCUSSION, "perc3Line", QObject::tr("Perc. 3 lines"),   3, 0,     2,   true,  true, false, true, false, true),
          StaffType(StaffGroup::PERCUSSION, "perc5Line", QObject::tr("Perc. 5 lines"),   5, 0,     1,   true,  true, false, true, false, true),
 //                 group            xml-name,     human-readable-name                  lin stpOff dist clef   bars stemless time      duration font     size off genDur     fret font          size off  duration symbol repeat      thru       minim style              onLin  rests  stmDn  stmThr upsDn  sTFing nums  bkTied
@@ -1404,7 +1418,7 @@ void StaffType::initStaffTypes()
          StaffType(StaffGroup::TAB, "tab5StrCommon", QObject::tr("Tab. 5-str. common"), 5, 0,     1.5, true,  true, false, false, "MuseScore Tab Modern", 15, 0, false, "MuseScore Tab Serif",   9, 0, TablatureSymbolRepeat::NEVER, false, TablatureMinimStyle::SHORTER,true,  false, true,  false, false, false, true, true),
          StaffType(StaffGroup::TAB, "tab5StrFull",   QObject::tr("Tab. 5-str. full"),   5, 0,     1.5, true,  true, false, false, "MuseScore Tab Modern", 15, 0, false, "MuseScore Tab Serif",   9, 0, TablatureSymbolRepeat::NEVER, false, TablatureMinimStyle::SLASHED,true,  true,  true,  true,  false, false, true, true),
          StaffType(StaffGroup::TAB, "tabUkulele",    QObject::tr("Tab. ukulele"),       4, 0,     1.5, true,  true, false, false, "MuseScore Tab Modern", 15, 0, false, "MuseScore Tab Serif",   9, 0, TablatureSymbolRepeat::NEVER, false, TablatureMinimStyle::SHORTER,true,  true,  true,  false, false, false, true, true),
-         StaffType(StaffGroup::TAB, "tabBalajka",    QObject::tr("Tab. balalaika"),     3, -2,    1.5, true,  true, false, false, "MuseScore Tab Modern", 15, 0, false, "MuseScore Tab Serif",   9, 0, TablatureSymbolRepeat::NEVER, false, TablatureMinimStyle::SHORTER,true,  true,  true,  false, false, false, true, true),
+         StaffType(StaffGroup::TAB, "tabBalajka",    QObject::tr("Tab. balalaika"),     3, 0,     1.5, true,  true, false, false, "MuseScore Tab Modern", 15, 0, false, "MuseScore Tab Serif",   9, 0, TablatureSymbolRepeat::NEVER, false, TablatureMinimStyle::SHORTER,true,  true,  true,  false, false, false, true, true),
 //       StaffType(StaffGroup::TAB, "tab6StrItalian",QObject::tr("Tab. 6-str. Italian"),6, 2,     1.5, false, true, true,  true,  "MuseScore Tab Italian",15, 0, true,  "MuseScore Tab Renaiss",10, 0, TablatureSymbolRepeat::NEVER, true,  TablatureMinimStyle::NONE,   true,  true,  false, false, true,  false, true, false),
 //       StaffType(StaffGroup::TAB, "tab6StrFrench", QObject::tr("Tab. 6-str. French"), 6, 2,     1.5, false, true, true,  true,  "MuseScore Tab French", 15, 0, true,  "MuseScore Tab Renaiss",10, 0, TablatureSymbolRepeat::NEVER, true,  TablatureMinimStyle::NONE,   false, false, false, false, false, false, false,false)
          StaffType(StaffGroup::TAB, "tab6StrItalian",QObject::tr("Tab. 6-str. Italian"),6, 0,     1.5, false, true, true,  true,  "MuseScore Tab Italian",15, 0, true,  "MuseScore Tab Renaiss",10, 0, TablatureSymbolRepeat::NEVER, true,  TablatureMinimStyle::NONE,   true,  true,  false, false, true,  false, true, false),

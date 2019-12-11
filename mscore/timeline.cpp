@@ -36,6 +36,7 @@
 #include "libmscore/marker.h"
 #include "texttools.h"
 #include "mixer.h"
+#include "tourhandler.h"
 
 namespace Ms {
 
@@ -56,9 +57,11 @@ void MuseScore::showTimeline(bool visible)
             }
       connect(_timeline, SIGNAL(visibilityChanged(bool)), act, SLOT(setChecked(bool)));
       connect(_timeline, SIGNAL(closed(bool)), act, SLOT(setChecked(bool)));
-      _timeline->setVisible(visible);
+      reDisplayDockWidget(_timeline, visible);
 
       getAction("toggle-timeline")->setChecked(visible);
+      if (visible)
+            TourHandler::startTour("timeline-tour");
       }
 
 //---------------------------------------------------------
@@ -875,7 +878,7 @@ void Timeline::drawGrid(int global_rows, int global_cols)
 
       //Draw grid
       Measure* curr_measure = _score->firstMeasure();
-      QList<Part*> part_list = _score->parts();
+      QList<Part*> part_list = getParts();
       for (int col = 0; col < global_cols; col++) {
             for (int row = 0; row < global_rows; row++) {
                   QGraphicsRectItem* graphics_rect_item = new QGraphicsRectItem(col * grid_width,
@@ -953,7 +956,7 @@ void Timeline::drawGrid(int global_rows, int global_cols)
             for (Segment* curr_seg = cm->first(); curr_seg; curr_seg = curr_seg->next()) {
                   //Toggle no_key if initial key signature is found
                   if (curr_seg->isKeySigType() && cm == _score->firstMeasure()) {
-                        if (no_key && curr_seg->tick() == 0)
+                        if (no_key && curr_seg->tick().isZero())
                               no_key = false;
                         }
 
@@ -1124,7 +1127,7 @@ void Timeline::key_meta(Segment* seg, int* stagger, int pos)
                   }
 
             //Ignore unpitched staves
-            if ((seg && !stave->isPitchedStaff(seg->tick())) || (!seg && !stave->isPitchedStaff(0))) {
+            if ((seg && !stave->isPitchedStaff(seg->tick())) || (!seg && !stave->isPitchedStaff(Fraction(0,1)))) {
                   track += VOICES;
                   continue;
                   }
@@ -1140,7 +1143,7 @@ void Timeline::key_meta(Segment* seg, int* stagger, int pos)
             if (seg)
                   global_key = stave->key(seg->tick());
             else
-                  global_key = stave->key(0);
+                  global_key = stave->key(Fraction(0,1));
             if (curr_key_sig) {
                   if (curr_key_sig->generated())
                         return;
@@ -1178,23 +1181,23 @@ void Timeline::key_meta(Segment* seg, int* stagger, int pos)
       QString tooltip;
       if (new_key == Key::INVALID) {
             key_text = "X";
-            tooltip = keyNames[15];
+            tooltip = qApp->translate("MuseScore", keyNames[15]);
             }
       else if (new_key == Key::NUM_OF) {
             key_text = "?";
-            tooltip = tr("Custom Key");
+            tooltip = tr("Custom Key Signature");
             }
       else if (int(new_key) == 0) {
             key_text = "\u266E";
-            tooltip = keyNames[14];
+            tooltip = qApp->translate("MuseScore", keyNames[14]);
             }
       else if (int(new_key) < 0) {
             key_text = QString::number(abs(int(new_key))) + "\u266D";
-            tooltip = keyNames[(7 + int(new_key)) * 2 + 1];
+            tooltip = qApp->translate("MuseScore", keyNames[(7 + int(new_key)) * 2 + 1]);
             }
       else {
             key_text = QString::number(abs(int(new_key))) + "\u266F";
-            tooltip = keyNames[(int(new_key) - 1) * 2];
+            tooltip = qApp->translate("MuseScore", keyNames[(int(new_key) - 1) * 2]);
             }
 
       int x = pos + (*stagger) * spacing;
@@ -1227,6 +1230,9 @@ void Timeline::barline_meta(Segment* seg, int* stagger, int pos)
                         break;
                   case BarLineType::END_REPEAT:
                         repeat_text = QString("End repeat");
+                        break;
+                  case BarLineType::END_START_REPEAT:
+                        // actually an end repeat followed by a start repeat, so nothing needs to be done here
                         break;
                   case BarLineType::DOUBLE:
                         repeat_text = QString("Double barline");
@@ -1463,9 +1469,14 @@ bool Timeline::addMetaValue(int x, int pos, QString meta_text, int row, ElementT
             graphics_text_item->setY(grid_height * row + verticalScrollBar()->value() - 2);
             item_to_add = graphics_text_item;
             }
+      else if (row == 0 ) {
+            graphics_text_item->setX(x);
+            graphics_text_item->setY(grid_height * row + verticalScrollBar()->value() - 6);
+            item_to_add = graphics_text_item;
+            }
       else {
             graphics_text_item->setX(x);
-            graphics_text_item->setY(grid_height * row + verticalScrollBar()->value());
+            graphics_text_item->setY(grid_height * row + verticalScrollBar()->value() - 1);
             item_to_add = graphics_text_item;
             }
 
@@ -1596,9 +1607,25 @@ int Timeline::correctPart(int stave)
       //Find correct stave (skipping hidden staves)
       QList<Staff*> list = _score->staves();
       int count = correctStave(stave);
-      return _score->parts().indexOf(list.at(count)->part());
+      return getParts().indexOf(list.at(count)->part());
       }
 
+//---------------------------------------------------------
+//   getParts
+//---------------------------------------------------------
+
+QList<Part*> Timeline::getParts()
+      {
+      QList<Part*> realPartList = _score->parts();
+      QList<Part*> partList;
+      for (Part* p : realPartList) {
+            for (int i = 0; i < p->nstaves(); i++) {
+                  partList.append(p);
+                  }
+            }
+
+      return partList;
+      }
 
 //---------------------------------------------------------
 //   changeSelection
@@ -1707,10 +1734,10 @@ void Timeline::drawSelection()
 
       std::set<std::tuple<Measure*, int, ElementType>> meta_labels_set;
 
-      const Selection selection = _score->selection();
-      QList<Element*> el = selection.elements();
+      const Selection& selection = _score->selection();
+      const QList<Element*>& el = selection.elements();
       for (Element* element : el) {
-            if (element->tick() == -1)
+            if (element->tick() == Fraction(-1,1))
                   continue;
             else {
                   switch (element->type()) {
@@ -1729,7 +1756,7 @@ void Timeline::drawSelection()
                   }
 
             int staffIdx;
-            int tick = element->tick();
+            Fraction tick = element->tick();
             Measure* measure = _score->tick2measure(tick);
             staffIdx = element->staffIdx();
             if (numToStaff(staffIdx) && !numToStaff(staffIdx)->show())
@@ -1750,7 +1777,8 @@ void Timeline::drawSelection()
                   if (barline &&
                       (barline->barLineType() == BarLineType::END_REPEAT || barline->barLineType() == BarLineType::DOUBLE || barline->barLineType() == BarLineType::END) &&
                       measure != _score->lastMeasure()) {
-                        measure = measure->prevMeasure();
+                        if (measure->prevMeasure())
+                              measure = measure->prevMeasure();
                         }
                   }
 
@@ -2206,6 +2234,9 @@ void Timeline::wheelEvent(QWheelEvent* event)
 
 void Timeline::updateGrid()
       {
+      if (!isVisible())
+            return;
+
       if (_score && _score->firstMeasure()) {
             drawGrid(nstaves(), _score->nmeasures());
             updateView();
@@ -2213,7 +2244,6 @@ void Timeline::updateGrid()
             mouseOver(mapToScene(mapFromGlobal(QCursor::pos())));
             row_names->updateLabels(getLabels(), grid_height);
             }
-
       viewport()->update();
       }
 
@@ -2227,6 +2257,7 @@ void Timeline::setScore(Score* s)
       scene()->clear();
 
       if (_score) {
+            connect(_score, &QObject::destroyed, this, &Timeline::objectDestroyed, Qt::UniqueConnection);
             drawGrid(nstaves(), _score->nmeasures());
             changeSelection(SelState::NONE);
             row_names->updateLabels(getLabels(), grid_height);
@@ -2254,10 +2285,23 @@ void Timeline::setScoreView(ScoreView* v)
       {
       _cv = v;
       if (_cv) {
-            connect(_cv, SIGNAL(sizeChanged()), this, SLOT(updateView()));
-            connect(_cv, SIGNAL(viewRectChanged()), this, SLOT(updateView()));
+            connect(_cv, &ScoreView::sizeChanged, this, &Timeline::updateView, Qt::UniqueConnection);
+            connect(_cv, &ScoreView::viewRectChanged, this, &Timeline::updateView, Qt::UniqueConnection);
+            connect(_cv, &QObject::destroyed, this, &Timeline::objectDestroyed, Qt::UniqueConnection);
             updateView();
             }
+      }
+
+//---------------------------------------------------------
+//   objectDestroyed
+//---------------------------------------------------------
+
+void Timeline::objectDestroyed(QObject* obj)
+      {
+      if (_cv == obj)
+            setScoreView(nullptr);
+      else if (_score == obj)
+            setScore(nullptr);
       }
 
 //---------------------------------------------------------
@@ -2266,6 +2310,9 @@ void Timeline::setScoreView(ScoreView* v)
 
 void Timeline::updateView()
       {
+      if (!isVisible())
+            return;
+
       if (_cv && _score) {
             QRectF canvas = QRectF(_cv->matrix().inverted().mapRect(_cv->geometry()));
 
@@ -2413,7 +2460,8 @@ QColor Timeline::colorBox(QGraphicsRectItem* item)
             for (int track = stave * VOICES; track < stave * VOICES + VOICES; track++) {
                   ChordRest* chord_rest = seg->cr(track);
                   if (chord_rest) {
-                        if (chord_rest->type() == ElementType::CHORD)
+                        ElementType crt = chord_rest->type();
+                        if (crt == ElementType::CHORD || crt == ElementType::REPEAT_MEASURE)
                               return QColor(Qt::gray);
                         }
                   }
@@ -2431,7 +2479,7 @@ std::vector<std::pair<QString, bool>> Timeline::getLabels()
             std::vector<std::pair<QString, bool>> no_labels;
             return no_labels;
             }
-      QList<Part*> part_list = _score->parts();
+      QList<Part*> part_list = getParts();
       //transfer them into a vector of qstrings and then add the meta row names
       std::vector<std::pair<QString, bool>> row_labels;
       if (collapsed_meta) {
@@ -2455,9 +2503,9 @@ std::vector<std::pair<QString, bool>> Timeline::getLabels()
             QString part_name = "";
             doc.setHtml(part_list.at(stave)->longName());
             part_name = doc.toPlainText();
-
             if (part_name.isEmpty())
                   part_name = part_list.at(stave)->instrumentName();
+
             std::pair<QString, bool> instrument_label(part_name, part_list.at(stave)->show());
             row_labels.push_back(instrument_label);
             }
@@ -2644,7 +2692,7 @@ void Timeline::toggleShow(int staff)
       {
       if (!_score)
             return;
-      QList<Part*> parts = _score->parts();
+      QList<Part*> parts = getParts();
       if (parts.size() > staff && staff >= 0) {
             parts.at(staff)->setShow(!parts.at(staff)->show());
             parts.at(staff)->undoChangeProperty(Pid::VISIBLE, parts.at(staff)->show());
@@ -2803,7 +2851,7 @@ void Timeline::requestInstrumentDialog()
       QAction* act = getAction("instruments");
       mscore->cmd(act);
       if (mscore->getMixer())
-            mscore->getMixer()->updateAll(_score->masterScore());
+            mscore->getMixer()->setScore(_score);
       }
 
 }

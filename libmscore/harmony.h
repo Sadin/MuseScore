@@ -63,6 +63,12 @@ struct TextSegment {
 struct RenderAction;
 class HDegree;
 
+enum class HarmonyType {
+      STANDARD,
+      ROMAN,
+      NASHVILLE
+      };
+
 class Harmony final : public TextBase {
       int _rootTpc;                       // root note for chord
       int _baseTpc;                       // bass note or chord base; used for "slash" chords
@@ -70,9 +76,12 @@ class Harmony final : public TextBase {
       int _id;                            // >0 = id of matched chord from chord list, if applicable
                                           // -1 = invalid chord
                                           // <-10000 = private id of generated chord or matched chord with no id
+      QString _function;                  // numeric representation of root for RNA or Nashville
       QString _userName;                  // name as typed by user if applicable
       QString _textName;                  // name recognized from chord list, read from score file, or constructed from imported source
       ParsedChord* _parsedForm;           // parsed form of chord
+      bool showSpell = false;             // show spell check warning
+      HarmonyType _harmonyType;           // used to control rendering, transposition, export, etc.
 
       QList<HDegree> _degreeList;
       QList<QFont> fontList;              // temp values used in render()
@@ -91,7 +100,7 @@ class Harmony final : public TextBase {
       virtual void drawEditMode(QPainter* p, EditData& ed) override;
       void render(const QString&, qreal&, qreal&);
       void render(const QList<RenderAction>& renderList, qreal&, qreal&, int tpc, NoteSpellingType noteSpelling = NoteSpellingType::STANDARD, NoteCaseType noteCase = NoteCaseType::AUTO);
-      virtual void styleChanged() override     { render(); }
+      virtual Sid getPropertyStyle(Pid) const override;
 
    public:
       Harmony(Score* = 0);
@@ -122,16 +131,14 @@ class Harmony final : public TextBase {
 
       void textChanged();
       virtual void layout() override;
-
-      const QRectF& bboxtight() const          { return _tbbox;        }
-      QRectF& bboxtight()                      { return _tbbox;        }
-      void setbboxtight(const QRectF& r) const { _tbbox = r;           }
+      virtual void layout1() override;
 
       virtual bool isEditable() const override { return true; }
       virtual void startEdit(EditData&) override;
       virtual bool edit(EditData&) override;
       virtual void endEdit(EditData&) override;
 
+      QString hFunction() const                { return _function;     }
       QString hUserName() const                { return _userName;     }
       QString hTextName() const                { return _textName;     }
       int baseTpc() const                      { return _baseTpc;      }
@@ -139,6 +146,7 @@ class Harmony final : public TextBase {
       int rootTpc() const                      { return _rootTpc;      }
       void setRootTpc(int val)                 { _rootTpc = val;       }
       void setTextName(const QString& s)       { _textName = s;        }
+      void setFunction(const QString& s)       { _function = s;        }
       QString rootName();
       QString baseName();
       void addDegree(const HDegree& d);
@@ -147,6 +155,8 @@ class Harmony final : public TextBase {
       void clearDegrees();
       const QList<HDegree>& degreeList() const;
       const ParsedChord* parsedForm();
+      HarmonyType harmonyType() const          { return _harmonyType;  }
+      void setHarmonyType(HarmonyType val);
 
       virtual void write(XmlWriter& xml) const override;
       virtual void read(XmlReader&) override;
@@ -175,6 +185,7 @@ class Harmony final : public TextBase {
       void setHarmony(const QString& s);
       void calculateBoundingRect();
 
+      virtual QString userName() const override;
       virtual QString accessibleInfo() const override;
       virtual QString screenReaderInfo() const override;
 

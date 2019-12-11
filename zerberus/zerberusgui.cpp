@@ -14,6 +14,7 @@
 
 #include "mscore/preferences.h"
 #include "mscore/extension.h"
+#include "mscore/icons.h"
 
 //---------------------------------------------------------
 //   SfzListDialog
@@ -95,19 +96,53 @@ ZerberusGui::ZerberusGui(Ms::Synthesizer* s)
    : SynthesizerGui(s)
       {
       setupUi(this);
+      connect(soundFontTop,    SIGNAL(clicked()), SLOT(soundFontTopClicked()));
       connect(soundFontUp,     SIGNAL(clicked()), SLOT(soundFontUpClicked()));
       connect(soundFontDown,   SIGNAL(clicked()), SLOT(soundFontDownClicked()));
       connect(soundFontAdd, SIGNAL(clicked()), SLOT(soundFontAddClicked()));
       connect(soundFontDelete, SIGNAL(clicked()), SLOT(soundFontDeleteClicked()));
       connect(&_futureWatcher, SIGNAL(finished()), this, SLOT(onSoundFontLoaded()));
-      _progressDialog = new QProgressDialog(tr("Loading..."), tr("Cancel"), 0, 100, 0, Qt::FramelessWindowHint);
+      _progressDialog = new QProgressDialog(tr("Loading…"), tr("Cancel"), 0, 100, 0, Qt::FramelessWindowHint);
       _progressDialog->reset(); // required for Qt 5.5, see QTBUG-47042
       connect(_progressDialog, SIGNAL(canceled()), this, SLOT(cancelLoadClicked()));
       _progressTimer = new QTimer(this);
       connect(_progressTimer, SIGNAL(timeout()), this, SLOT(updateProgress()));
       connect(files, SIGNAL(itemSelectionChanged()), this, SLOT(updateButtons()));
+      
+      soundFontUp->setIcon(*Ms::icons[int(Ms::Icons::arrowUp_ICON)]);
+      soundFontDown->setIcon(*Ms::icons[int(Ms::Icons::arrowDown_ICON)]);
+      soundFontTop->setIcon(*Ms::icons[int(Ms::Icons::arrowsMoveToTop_ICON)]);
+      
       updateButtons();
       }
+
+//---------------------------------------------------------
+//   moveSoundfontInTheList
+//---------------------------------------------------------
+
+void ZerberusGui::moveSoundfontInTheList(int currentIdx, int targetIdx)
+      {
+      QStringList sfonts = zerberus()->soundFonts();
+      sfonts.move(currentIdx, targetIdx);
+      zerberus()->removeSoundFonts(zerberus()->soundFonts());
+      
+      loadSoundFontsAsync(sfonts);
+      files->setCurrentRow(targetIdx);
+      emit sfChanged();
+      }
+
+void ZerberusGui::soundFontTopClicked()
+       {
+       int row = files->currentRow();
+       if (row <= 0)
+             return;
+       
+       moveSoundfontInTheList(row, 0);
+       }
+
+//---------------------------------------------------------
+//   soundFontUpClicked
+//---------------------------------------------------------
 
 void ZerberusGui::soundFontUpClicked()
       {
@@ -115,14 +150,12 @@ void ZerberusGui::soundFontUpClicked()
       if (row <= 0)
             return;
 
-      QStringList sfonts = zerberus()->soundFonts();
-      sfonts.swap(row, row-1);
-      zerberus()->removeSoundFonts(zerberus()->soundFonts());
-
-      loadSoundFontsAsync(sfonts);
-      files->setCurrentRow(row-1);
-      emit sfChanged();
+      moveSoundfontInTheList(row, row - 1);
       }
+
+//---------------------------------------------------------
+//   soundFontDownClicked
+//---------------------------------------------------------
 
 void ZerberusGui::soundFontDownClicked()
       {
@@ -131,13 +164,7 @@ void ZerberusGui::soundFontDownClicked()
       if (row + 1 >= rows)
             return;
 
-      QStringList sfonts = zerberus()->soundFonts();
-      sfonts.swap(row, row + 1);
-      zerberus()->removeSoundFonts(zerberus()->soundFonts());
-
-      loadSoundFontsAsync(sfonts);
-      files->setCurrentRow(row + 1);
-      emit sfChanged();
+      moveSoundfontInTheList(row, row + 1);
       }
 
 //---------------------------------------------------------
@@ -160,7 +187,7 @@ void ZerberusGui::loadSoundFontsAsync(QStringList sfonts)
 
 static void collectFiles(QFileInfoList* l, const QString& path)
       {
-      // printf("collect files <%s>\n", qPrintable(path));
+//printf("collect files <%s>\n", qPrintable(path));
 
       QDir dir(path);
       foreach (const QFileInfo& s, dir.entryInfoList(QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot)) {
@@ -281,10 +308,12 @@ void ZerberusGui::updateProgress()
 
 void ZerberusGui::updateButtons()
       {
+      int rows = zerberus()->soundFonts().count();
       int row = files->currentRow();
+      soundFontTop->setEnabled(row > 0);
+      soundFontUp->setEnabled(row > 0);
+      soundFontDown->setEnabled((row != -1) && (row < (rows-1)));
       soundFontDelete->setEnabled(row != -1);
-      soundFontUp->setEnabled(row != -1);
-      soundFontDown->setEnabled(row != -1);
       }
 
 //---------------------------------------------------------

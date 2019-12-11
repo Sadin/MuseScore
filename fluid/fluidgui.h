@@ -61,8 +61,10 @@ class FluidGui : public Ms::SynthesizerGui, Ui::FluidGui {
       QTimer * _progressTimer;
       std::list<struct SfNamePath> _sfToLoad;
       void loadSf();
+      void moveSoundfontInTheList(int currentIdx, int targetIdx);
 
    private slots:
+      void soundFontTopClicked();
       void soundFontUpClicked();
       void soundFontDownClicked();
       void soundFontAddClicked();

@@ -111,18 +111,29 @@ FluidGui::FluidGui(Synthesizer* s)
    : SynthesizerGui(s)
       {
       setupUi(this);
+      connect(soundFontTop,    SIGNAL(clicked()), SLOT(soundFontTopClicked()));
       connect(soundFontUp,     SIGNAL(clicked()), SLOT(soundFontUpClicked()));
       connect(soundFontDown,   SIGNAL(clicked()), SLOT(soundFontDownClicked()));
       connect(soundFontAdd,    SIGNAL(clicked()), SLOT(soundFontAddClicked()));
       connect(soundFontDelete, SIGNAL(clicked()), SLOT(soundFontDeleteClicked()));
       connect(soundFonts,      SIGNAL(itemSelectionChanged ()),  SLOT(updateUpDownButtons()));
       connect(&_futureWatcher, SIGNAL(finished()), this, SLOT(onSoundFontLoaded()));
-      _progressDialog = new QProgressDialog(tr("Loading..."), tr("Cancel"), 0, 100, 0, Qt::FramelessWindowHint);
+      _progressDialog = new QProgressDialog(tr("Loading…"), tr("Cancel"), 0, 100, 0, Qt::FramelessWindowHint);
       _progressDialog->reset(); // required for Qt 5.5, see QTBUG-47042
       connect(_progressDialog, SIGNAL(canceled()), this, SLOT(cancelLoadClicked()));
       _progressTimer = new QTimer(this);
       connect(_progressTimer, SIGNAL(timeout()), this, SLOT(updateProgress()));
       connect(soundFonts, SIGNAL(itemSelectionChanged()), this, SLOT(updateUpDownButtons()));
+      
+      soundFontUp->setIcon(*icons[int(Icons::arrowUp_ICON)]);
+      soundFontDown->setIcon(*icons[int(Icons::arrowDown_ICON)]);
+      soundFontTop->setIcon(*icons[int(Ms::Icons::arrowsMoveToTop_ICON)]);
+      
+      //update sfs
+      QStringList sfonts = fluid()->soundFonts();
+      soundFonts->clear();
+      soundFonts->addItems(sfonts);
+      
       updateUpDownButtons();
       }
 
@@ -140,6 +151,34 @@ void FluidGui::synthesizerChanged()
       }
 
 //---------------------------------------------------------
+//   moveSoundfontInTheList
+//---------------------------------------------------------
+
+void FluidGui::moveSoundfontInTheList(int currentIdx, int targetIdx)
+      {
+      QStringList sfonts = fluid()->soundFonts();
+      for (auto sfName : sfonts)
+            fluid()->removeSoundFont(sfName);
+      
+      sfonts.move(currentIdx, targetIdx);
+      fluid()->loadSoundFonts(sfonts);
+      sfonts = fluid()->soundFonts();
+      soundFonts->clear();
+      soundFonts->addItems(sfonts);
+      soundFonts->setCurrentRow(targetIdx);
+      emit sfChanged();
+      }
+
+void FluidGui::soundFontTopClicked()
+       {
+       int row = soundFonts->currentRow();
+       if (row <= 0)
+             return;
+       
+       moveSoundfontInTheList(row, 0);
+       }
+
+//---------------------------------------------------------
 //   soundFontUpClicked
 //---------------------------------------------------------
 
@@ -148,14 +187,8 @@ void FluidGui::soundFontUpClicked()
       int row = soundFonts->currentRow();
       if (row <= 0)
             return;
-      QStringList sfonts = fluid()->soundFonts();
-      sfonts.swap(row, row - 1);
-      fluid()->loadSoundFonts(sfonts);
-      sfonts = fluid()->soundFonts();
-      soundFonts->clear();
-      soundFonts->addItems(sfonts);
-      soundFonts->setCurrentRow(row - 1);
-      emit sfChanged();
+      
+      moveSoundfontInTheList(row, row - 1);
       }
 
 //---------------------------------------------------------
@@ -169,14 +202,7 @@ void FluidGui::soundFontDownClicked()
       if (row + 1 >= rows)
             return;
 
-      QStringList sfonts = fluid()->soundFonts();
-      sfonts.swap(row, row + 1);
-      fluid()->loadSoundFonts(sfonts);
-      sfonts = fluid()->soundFonts();
-      soundFonts->clear();
-      soundFonts->addItems(sfonts);
-      soundFonts->setCurrentRow(row + 1);
-      emit sfChanged();
+      moveSoundfontInTheList(row, row + 1);
       }
 
 //---------------------------------------------------------
@@ -205,6 +231,7 @@ void FluidGui::updateUpDownButtons()
       int rows = soundFonts->count();
       int row = soundFonts->currentRow();
       soundFontUp->setEnabled(row > 0);
+      soundFontTop->setEnabled(row > 0);
       soundFontDown->setEnabled((row != -1) && (row < (rows-1)));
       soundFontDelete->setEnabled(row != -1);
       }

@@ -146,7 +146,7 @@ void Box::editDrag(EditData& ed)
                   }
             bbox().setRect(0.0, 0.0, system()->width(), point(boxHeight()));
             system()->setHeight(height());
-            score()->setLayout(tick());
+            triggerLayout();
             }
       else {
             _boxWidth += Spatium(ed.delta.x() / spatium());
@@ -155,7 +155,7 @@ void Box::editDrag(EditData& ed)
                   int n = lrint(_boxWidth.val() / hRaster);
                   _boxWidth = Spatium(hRaster * n);
                   }
-            score()->setLayout(tick());
+            triggerLayout();
             }
       layout();
       }
@@ -189,7 +189,7 @@ void Box::updateGrips(EditData& ed) const
 
 void Box::write(XmlWriter& xml) const
       {
-      xml.stag(name());
+      xml.stag(this);
       writeProperties(xml);
       xml.etag();
       }
@@ -222,22 +222,7 @@ void Box::read(XmlReader& e)
       _bottomMargin    = 0.0;
       _boxHeight       = Spatium(0);     // override default set in constructor
       _boxWidth        = Spatium(0);
-
-      while (e.readNextStartElement()) {
-            const QStringRef& tag(e.name());
-            if (tag == "HBox") {
-                  HBox* hb = new HBox(score());
-                  hb->read(e);
-                  add(hb);
-                  }
-            else if (tag == "VBox") {
-                  VBox* vb = new VBox(score());
-                  vb->read(e);
-                  add(vb);
-                  }
-            else if (!Box::readProperties(e))
-                  e.unknown();
-            }
+      MeasureBase::read(e);
       }
 
 //---------------------------------------------------------
@@ -398,7 +383,7 @@ bool Box::setProperty(Pid propertyId, const QVariant& v)
             default:
                   return MeasureBase::setProperty(propertyId, v);
             }
-      score()->setLayout(tick());
+      triggerLayout();
       return true;
       }
 
@@ -494,9 +479,11 @@ void HBox::layout2()
 
 bool Box::acceptDrop(EditData& data) const
       {
-      ElementType t = data.element->type();
-      if (data.element->flag(ElementFlag::ON_STAFF))
+      if (data.dropElement->flag(ElementFlag::ON_STAFF))
             return false;
+      if (MScore::debugMode)
+            qDebug("<%s>", data.dropElement->name());
+      ElementType t = data.dropElement->type();
       switch (t) {
             case ElementType::LAYOUT_BREAK:
             case ElementType::TEXT:
@@ -505,7 +492,7 @@ bool Box::acceptDrop(EditData& data) const
             case ElementType::SYMBOL:
                   return true;
             case ElementType::ICON:
-                  switch (toIcon(data.element)->iconType()) {
+                  switch (toIcon(data.dropElement)->iconType()) {
                         case IconType::VFRAME:
                         case IconType::TFRAME:
                         case IconType::FFRAME:
@@ -516,7 +503,7 @@ bool Box::acceptDrop(EditData& data) const
                         }
                   break;
             case ElementType::BAR_LINE:
-                  return type() == ElementType::HBOX;
+                  return isHBox();
             default:
                   break;
             }
@@ -529,9 +516,11 @@ bool Box::acceptDrop(EditData& data) const
 
 Element* Box::drop(EditData& data)
       {
-      Element* e = data.element;
+      Element* e = data.dropElement;
       if (e->flag(ElementFlag::ON_STAFF))
             return 0;
+      if (MScore::debugMode)
+            qDebug("<%s>", e->name());
       switch (e->type()) {
             case ElementType::LAYOUT_BREAK:
                   {
@@ -611,7 +600,7 @@ QRectF HBox::drag(EditData& data)
       {
       QRectF r(canvasBoundingRect());
       qreal diff = data.delta.x();
-      qreal x1   = userOff().x() + diff;
+      qreal x1   = offset().x() + diff;
       if (parent()->type() == ElementType::VBOX) {
             VBox* vb = toVBox(parent());
             qreal x2 = parent()->width() - width() - (vb->leftMargin() + vb->rightMargin()) * DPMM;
@@ -620,7 +609,7 @@ QRectF HBox::drag(EditData& data)
             else if (x1 > x2)
                   x1 = x2;
             }
-      setUserOff(QPointF(x1, 0.0));
+      setOffset(QPointF(x1, 0.0));
 //      setStartDragPosition(data.delta);
       return canvasBoundingRect() | r;
       }
@@ -631,7 +620,7 @@ QRectF HBox::drag(EditData& data)
 
 void HBox::endEditDrag(EditData&)
       {
-      score()->setLayout(tick());
+      triggerLayout();
       score()->update();
       }
 
@@ -642,6 +631,32 @@ void HBox::endEditDrag(EditData&)
 bool HBox::isMovable() const
       {
       return parent() && (parent()->isHBox() || parent()->isVBox());
+      }
+
+//---------------------------------------------------------
+//   writeProperties
+//---------------------------------------------------------
+
+void HBox::writeProperties(XmlWriter& xml) const
+      {
+      writeProperty(xml, Pid::CREATE_SYSTEM_HEADER);
+      Box::writeProperties(xml);
+      }
+
+//---------------------------------------------------------
+//   readProperties
+//---------------------------------------------------------
+
+bool HBox::readProperties(XmlReader& e)
+      {
+      const QStringRef& tag(e.name());
+      if (readProperty(tag, e, Pid::CREATE_SYSTEM_HEADER))
+            ;
+      else if (Box::readProperties(e))
+            ;
+      else
+            return false;
+      return true;
       }
 
 //---------------------------------------------------------
@@ -667,7 +682,7 @@ bool HBox::setProperty(Pid propertyId, const QVariant& v)
       switch (propertyId) {
             case Pid::CREATE_SYSTEM_HEADER:
                   setCreateSystemHeader(v.toBool());
-                  score()->setLayout(tick());
+                  triggerLayout();
                   break;
             default:
                   return Box::setProperty(propertyId, v);
@@ -707,7 +722,7 @@ VBox::VBox(Score* score)
 
 void VBox::layout()
       {
-      setPos(QPointF());      // !?
+      setPos(QPointF());
       if (system())
             bbox().setRect(0.0, 0.0, system()->width(), point(boxHeight()));
       else
@@ -744,5 +759,28 @@ void FBox::add(Element* e)
             }
       el().push_back(e);
       }
+
+//---------------------------------------------------------
+//   accessibleExtraInfo
+//---------------------------------------------------------
+
+QString Box::accessibleExtraInfo() const
+      {
+      QString rez = "";
+      for (Element* e : el())
+            rez += " " + e->screenReaderInfo();
+      return rez;
+      }
+
+//---------------------------------------------------------
+//   accessibleExtraInfo
+//---------------------------------------------------------
+
+QString TBox::accessibleExtraInfo() const
+      {
+      QString rez = _text->screenReaderInfo();
+      return rez;
+      }
+
 }
 

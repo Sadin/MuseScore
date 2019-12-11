@@ -56,7 +56,14 @@ enum class KeyMode {
       UNKNOWN = -1,
       NONE,
       MAJOR,
-      MINOR
+      MINOR,
+      DORIAN,
+      PHRYGIAN,
+      LYDIAN,
+      MIXOLYDIAN,
+      AEOLIAN,
+      IONIAN,
+      LOCRIAN
       };
 
 static inline bool operator< (Key a, Key b) { return static_cast<int>(a) < static_cast<int>(b); }
@@ -98,6 +105,7 @@ class KeySigEvent {
       KeySigEvent(const KeySigEvent&);
 
       bool operator==(const KeySigEvent& e) const;
+      bool operator!=(const KeySigEvent& e) const { return !(*this == e); }
 
       void setKey(Key v);
       void print() const;

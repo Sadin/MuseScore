@@ -51,7 +51,7 @@ class SysStaff {
       bool _show  { true };         // derived from Staff or false if empty
                                     // staff is hidden
    public:
-      int idx     { 0    };
+      //int idx     { 0    };
       QList<InstrumentName*> instrumentNames;
 
       const QRectF& bbox() const    { return _bbox; }
@@ -89,7 +89,14 @@ class System final : public Element {
       mutable bool fixedDownDistance { false  };
       qreal _distance;                               // temp. variable used during layout
 
-   public:
+      int firstVisibleSysStaff() const;
+      int lastVisibleSysStaff() const;
+
+      int getBracketsColumnsCount();
+      void setBracketsXPosition(const qreal xOffset);
+      Bracket* createBracket(Ms::BracketItem* bi, int column, int staffIdx, QList<Ms::Bracket *>& bl, Measure* measure);
+
+public:
       System(Score*);
       ~System();
       virtual System* clone() const override      { return new System(*this); }
@@ -104,10 +111,14 @@ class System final : public Element {
       virtual void scanElements(void* data, void (*func)(void*, Element*), bool all=true) override;
 
       void appendMeasure(MeasureBase*);
+      void removeMeasure(MeasureBase*);
+      void removeLastMeasure();
 
       Page* page() const                    { return (Page*)parent(); }
 
       void layoutSystem(qreal);
+
+      void addBrackets(Measure* measure);
 
       void layout2();                     ///< Called after Measure layout.
       void clear();                       ///< Clear measure list.
@@ -123,21 +134,20 @@ class System final : public Element {
 
       SysStaff* insertStaff(int);
       void removeStaff(int);
+      void adjustStavesNumber(int);
 
       int y2staff(qreal y) const;
-      void setInstrumentNames(bool longName);
-      int snap(int tick, const QPointF p) const;
-      int snapNote(int tick, const QPointF p, int staff) const;
+      void setInstrumentNames(bool longName, Fraction tick = {0,1});
+      Fraction snap(const Fraction& tick, const QPointF p) const;
+      Fraction snapNote(const Fraction& tick, const QPointF p, int staff) const;
 
-      std::vector<MeasureBase*>& measures()             { return ml; }
       const std::vector<MeasureBase*>& measures() const { return ml; }
 
       MeasureBase* measure(int idx)          { return ml[idx]; }
       Measure* firstMeasure() const;
       Measure* lastMeasure() const;
-      int endTick() const;
+      Fraction endTick() const;
 
-      MeasureBase* prevMeasure(const MeasureBase*) const;
       MeasureBase* nextMeasure(const MeasureBase*) const;
 
       qreal leftMargin() const    { return _leftMargin; }
@@ -159,6 +169,7 @@ class System final : public Element {
       qreal bottomDistance(int staffIdx, const SkylineLine&) const;
       qreal minTop() const;
       qreal minBottom() const;
+      qreal spacerDistance(bool up) const;
 
       void moveBracket(int staffIdx, int srcCol, int dstCol);
       bool hasFixedDownDistance() const { return fixedDownDistance; }

@@ -1,7 +1,6 @@
 //=============================================================================
 //  MusE Score
 //  Linux Music Score Editor
-//  $Id: importove.cpp 4287 2011-05-17 14:50:09Z vanferry $
 //
 //  Copyright (C) 2002-2009 Werner Schweer and others
 //
@@ -593,7 +592,6 @@ int OveSong::getPartBarCount() const {
       }
 
 QPair<int, int> OveSong::trackToPartStaff(int track) const {
-      QPair<int, int> partStaff;
       int i;
       int staffCount = 0;
 

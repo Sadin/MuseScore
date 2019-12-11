@@ -1,7 +1,6 @@
 //=============================================================================
 //  MusE Score
 //  Linux Music Score Editor
-//  $Id: metaedit.cpp 5290 2012-02-07 16:27:27Z wschweer $
 //
 //  Copyright (C) 2002-2008 Werner Schweer and others
 //
@@ -46,6 +45,7 @@ MetaEditDialog::MetaEditDialog(Score* s, QWidget* parent)
       else
             revision->setText(QString::number(rev, 10));
       filePath->setText(score->importedFilePath());
+      filePath->setTextInteractionFlags(Qt::TextSelectableByMouse);
 
       int idx = 0;
       QMapIterator<QString, QString> i(s->metaTags());
